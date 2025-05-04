@@ -1,0 +1,26 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+import os
+
+# Tạo thư mục WebDrivers nếu chưa tồn tại
+webdrivers_dir = os.path.join(os.getcwd(), "WebDrivers")
+os.makedirs(webdrivers_dir, exist_ok=True)
+
+# Tự động tải và cài đặt ChromeDriver tương thích
+driver_path = ChromeDriverManager(path=webdrivers_dir).install()
+
+# Cấu hình Selenium
+chrome_options = Options()
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+# Khởi tạo ChromeDriver
+service = Service(driver_path)
+driver = webdriver.Chrome(service=service, options=chrome_options)
+
+# Tiếp tục code của bạn...
+driver.get("https://finance.vietstock.vn/ACB-ngan-hang-tmcp-a-chau.htm")
+# ...
+driver.quit()
