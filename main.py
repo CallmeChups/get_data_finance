@@ -12,9 +12,233 @@ import time
 import pandas as pd
 from icecream import ic
 from datetime import datetime
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import numpy as np
 
 # Dictionary để lưu trữ URL của các symbol đã tìm thấy
 symbol_urls = {}
+
+def convert_to_float(value):
+    """Chuyển đổi giá trị thành float nếu có thể"""
+    if pd.isna(value) or value == 'N/A':
+        return None
+    if isinstance(value, (int, float)):
+        if np.isinf(value) or np.isnan(value):
+            return None
+        return float(value)
+    # Thử chuyển đổi chuỗi thành số
+    try:
+        # Xử lý chuỗi có dấu phẩy ngăn cách hàng nghìn
+        if isinstance(value, str):
+            value = value.replace(',', '')
+        return float(value)
+    except:
+        return None
+
+# Hàm cập nhật Google Sheets
+def update_google_sheets(symbol, data):
+    # Thiết lập credentials cho Google Sheets API
+    scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+    client = gspread.authorize(creds)
+    
+    # Mở spreadsheet
+    spreadsheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1BrzaI-Il-H2IDliPGQEzn9aXu5LbM0Mltg6OMQure4U/edit?gid=969948111')
+    
+    # Lấy worksheet cho symbol
+    try:
+        worksheet = spreadsheet.worksheet(symbol)
+    except:
+        print(f"✗ Không tìm thấy sheet cho {symbol}")
+        return
+    
+    # Chuẩn bị dữ liệu để cập nhật theo batch
+    batch_data = {
+        'requests': []
+    }
+    
+    # Cập nhật EPS (5 giá trị)
+    eps_cells = ['K13', 'L13', 'M13', 'N13', 'O13']
+    for cell, value in zip(eps_cells, data['EPS']):
+        converted_value = convert_to_float(value)
+        if converted_value is not None:
+            batch_data['requests'].append({
+                'updateCells': {
+                    'range': {
+                        'sheetId': worksheet.id,
+                        'startRowIndex': int(cell[1:]) - 1,
+                        'endRowIndex': int(cell[1:]),
+                        'startColumnIndex': ord(cell[0]) - ord('A'),
+                        'endColumnIndex': ord(cell[0]) - ord('A') + 1
+                    },
+                    'rows': [{
+                        'values': [{
+                            'userEnteredValue': {
+                                'numberValue': converted_value
+                            }
+                        }]
+                    }],
+                    'fields': 'userEnteredValue'
+                }
+            })
+    
+    # Cập nhật ROE (5 giá trị)
+    roe_cells = ['K15', 'L15', 'M15', 'N15', 'O15']
+    for cell, value in zip(roe_cells, data['ROE']):
+        converted_value = convert_to_float(value)
+        if converted_value is not None:
+            batch_data['requests'].append({
+                'updateCells': {
+                    'range': {
+                        'sheetId': worksheet.id,
+                        'startRowIndex': int(cell[1:]) - 1,
+                        'endRowIndex': int(cell[1:]),
+                        'startColumnIndex': ord(cell[0]) - ord('A'),
+                        'endColumnIndex': ord(cell[0]) - ord('A') + 1
+                    },
+                    'rows': [{
+                        'values': [{
+                            'userEnteredValue': {
+                                'numberValue': converted_value
+                            }
+                        }]
+                    }],
+                    'fields': 'userEnteredValue'
+                }
+            })
+    
+    # Cập nhật % NN sở hữu
+    cell = 'C29'
+    converted_value = convert_to_float(data['Owned Ratio'])
+    if converted_value is not None:
+        batch_data['requests'].append({
+            'updateCells': {
+                'range': {
+                    'sheetId': worksheet.id,
+                    'startRowIndex': int(cell[1:]) - 1,
+                    'endRowIndex': int(cell[1:]),
+                    'startColumnIndex': ord(cell[0]) - ord('A'),
+                    'endColumnIndex': ord(cell[0]) - ord('A') + 1
+                },
+                'rows': [{
+                    'values': [{
+                        'userEnteredValue': {
+                            'numberValue': converted_value
+                        }
+                    }]
+                }],
+                'fields': 'userEnteredValue'
+            }
+        })
+    
+    # Cập nhật Khối lượng lưu hành
+    cell = 'O36'
+    converted_value = convert_to_float(data['Outstanding Shares'])
+    if converted_value is not None:
+        batch_data['requests'].append({
+            'updateCells': {
+                'range': {
+                    'sheetId': worksheet.id,
+                    'startRowIndex': int(cell[1:]) - 1,
+                    'endRowIndex': int(cell[1:]),
+                    'startColumnIndex': ord(cell[0]) - ord('A'),
+                    'endColumnIndex': ord(cell[0]) - ord('A') + 1
+                },
+                'rows': [{
+                    'values': [{
+                        'userEnteredValue': {
+                            'numberValue': converted_value
+                        }
+                    }]
+                }],
+                'fields': 'userEnteredValue'
+            }
+        })
+    
+    # Cập nhật KLGD khớp lệnh trung bình 10 phiên
+    cell = 'C24'
+    converted_value = convert_to_float(data['Avg Trading Volume'])
+    if converted_value is not None:
+        batch_data['requests'].append({
+            'updateCells': {
+                'range': {
+                    'sheetId': worksheet.id,
+                    'startRowIndex': int(cell[1:]) - 1,
+                    'endRowIndex': int(cell[1:]),
+                    'startColumnIndex': ord(cell[0]) - ord('A'),
+                    'endColumnIndex': ord(cell[0]) - ord('A') + 1
+                },
+                'rows': [{
+                    'values': [{
+                        'userEnteredValue': {
+                            'numberValue': converted_value
+                        }
+                    }]
+                }],
+                'fields': 'userEnteredValue'
+            }
+        })
+    
+    # Cập nhật Giá đóng cửa gần nhất
+    price, date = data['Latest Close']
+    cell = 'K45'
+    converted_value = convert_to_float(price)
+    if converted_value is not None:
+        batch_data['requests'].append({
+            'updateCells': {
+                'range': {
+                    'sheetId': worksheet.id,
+                    'startRowIndex': int(cell[1:]) - 1,
+                    'endRowIndex': int(cell[1:]),
+                    'startColumnIndex': ord(cell[0]) - ord('A'),
+                    'endColumnIndex': ord(cell[0]) - ord('A') + 1
+                },
+                'rows': [{
+                    'values': [{
+                        'userEnteredValue': {
+                            'numberValue': converted_value
+                        }
+                    }]
+                }],
+                'fields': 'userEnteredValue'
+            }
+        })
+    
+    # Cập nhật Lợi nhuận sau thuế (5 giá trị)
+    profit_cells = ['K3', 'L3', 'M3', 'N3', 'O3']
+    for cell, value in zip(profit_cells, data['Profit'][1]):  # Lấy phần values từ tuple (periods, values)
+        converted_value = convert_to_float(value)
+        if converted_value is not None:
+            batch_data['requests'].append({
+                'updateCells': {
+                    'range': {
+                        'sheetId': worksheet.id,
+                        'startRowIndex': int(cell[1:]) - 1,
+                        'endRowIndex': int(cell[1:]),
+                        'startColumnIndex': ord(cell[0]) - ord('A'),
+                        'endColumnIndex': ord(cell[0]) - ord('A') + 1
+                    },
+                    'rows': [{
+                        'values': [{
+                            'userEnteredValue': {
+                                'numberValue': converted_value
+                            }
+                        }]
+                    }],
+                    'fields': 'userEnteredValue'
+                }
+            })
+    
+    # Thực hiện cập nhật theo batch
+    try:
+        if batch_data['requests']:  # Chỉ thực hiện nếu có request
+            spreadsheet.batch_update(batch_data)
+            time.sleep(2)  # Thêm delay 2 giây sau mỗi lần cập nhật
+    except Exception as e:
+        print(f"✗ Lỗi khi cập nhật Google Sheets cho {symbol}: {e}")
+        time.sleep(5)  # Thêm delay dài hơn nếu có lỗi
 
 # Hàm khởi tạo Chrome driver chung
 def setup_driver(headless=True):
@@ -385,9 +609,11 @@ def get_latest_close_price(symbol, max_retries=3):
 # Hàm xuất dữ liệu ra Excel
 def export_to_excel(symbols=["ACB"]):
     excel_file = "financial_data.xlsx"
+    total_symbols = len(symbols)
+    
     with pd.ExcelWriter(excel_file, engine="openpyxl") as writer:
-        for symbol in symbols:
-            ic(f"\nXử lý dữ liệu cho {symbol}...")
+        for index, symbol in enumerate(symbols, 1):
+            print(f"\n[{index}/{total_symbols}] Đang xử lý dữ liệu cho {symbol}...")
             data = {
                 "EPS": get_financial_data("EPS", symbol) or ["N/A"] * 5,
                 "ROE": get_financial_data("ROE", symbol) or ["N/A"] * 5,
@@ -430,12 +656,26 @@ def export_to_excel(symbols=["ACB"]):
             ], ignore_index=True)
             
             final_df.to_excel(writer, sheet_name=symbol, index=False)
-            ic(f"Đã ghi dữ liệu cho {symbol} vào file Excel")
+            print(f"✓ Đã ghi dữ liệu cho {symbol} vào file Excel")
 
             # Ghi giá đóng cửa vào file txt riêng
             with open("last_close_prices.txt", "a", encoding="utf-8") as f:
                 if price != "N/A" and date != "N/A":
                     f.write(f"{symbol}_{date}: {price}\n")
+            
+            # Cập nhật Google Sheets
+            try:
+                update_google_sheets(symbol, data)
+                print(f"✓ Đã cập nhật dữ liệu cho {symbol} lên Google Sheets")
+            except Exception as e:
+                print(f"✗ Lỗi khi cập nhật Google Sheets cho {symbol}: {e}")
+
+            # In thông tin về tiến độ
+            remaining = total_symbols - index
+            if remaining > 0:
+                print(f"\nCòn {remaining} symbol cần xử lý...")
+            else:
+                print("\nĐã hoàn thành xử lý tất cả các symbol!")
 
     print(f"\nĐã xuất dữ liệu ra file: {excel_file}")
 

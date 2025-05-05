@@ -1,0 +1,8 @@
+EPS 					K13, L13, M13, N13, O13
+ROE					K15, L15, M15, N15, O15
+% NN sở hữu				C29
+Khối lượng lưu hành			O36
+KLGD khớp lệnh trung bình 10 phiên	C24
+Giá đóng cửa gần nhất       K45
+Lợi nhuận sau thuế			K3, L3, M3, N3, O3
+
